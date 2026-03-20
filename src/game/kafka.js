@@ -392,8 +392,8 @@ export class Kafka {
     ctx.save();
     ctx.translate(renderX, renderY);
 
-    // Flip for left-facing
-    if (!this.facingRight) ctx.scale(-1, 1);
+    // Cat emoji faces left natively — flip to face right
+    if (this.facingRight) ctx.scale(-1, 1);
 
     // Squash/stretch
     ctx.scale(this.scaleX, this.scaleY);
