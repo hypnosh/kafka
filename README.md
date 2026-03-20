@@ -1,2 +1,2 @@
-# kafka
+# kafka 🐈
 Kafka on the run
