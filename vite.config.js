@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/whisker-run/', // match your repo name exactly
+  base: '/', // match your repo name exactly
   plugins: [
     react(),
     VitePWA({
