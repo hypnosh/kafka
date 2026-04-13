@@ -4,18 +4,22 @@ const SWEET_TREATS = ['🍩', '🎂', '🍰', '🧁', '🍪', '🍫'];
 
 const FONT_SIZE = 26;
 
-const SPAWN_LOOKAHEAD = 800;
+const SPAWN_LOOKAHEAD = 2400;  // items exist well ahead of Kafka at all times
 const MIN_SPAWN_GAP   = 350;
 const MAX_SPAWN_GAP   = 700;
 
 // Energy values
-const TREAT_ENERGY = 0.20;
+const TREAT_ENERGY = 0.08;  // reduced — treats are a nibble, not a meal
 const MOUSE_ENERGY = 0.35;
 const MILK_ENERGY  = 1.00;
+const BIRD_ENERGY  = 0.12;  // requires a jump — worth a little more than a treat
+const BOX_ENERGY   = 0.10;  // tiny — it's just a box, but cats love boxes
 
 // Points per PRD scoring model
 const TREAT_POINTS = 150;
 const MOUSE_POINTS = 500;
+const BIRD_POINTS  = 300;  // mid-tier — requires a bit of chase
+const BOX_POINTS   = 100;  // low — just for fun, no chase needed
 
 // Flash colours (per PRD)
 const FLASH_TREAT = '#ffb3c6';  // soft pink
@@ -32,8 +36,19 @@ export class BoostManager {
     this.groundY = canvasHeight - 80;
 
     this.items = [];
-    this._nextSpawnX = SPAWN_LOOKAHEAD;
+    this._nextSpawnX = 300;  // first item appears shortly after run start
     this._time = 0;
+
+    // Pre-populate so items are already in the world on frame one
+    this._preseed();
+  }
+
+  _preseed() {
+    while (this._nextSpawnX < SPAWN_LOOKAHEAD) {
+      this._spawnItem(this._nextSpawnX);
+      const gap = MIN_SPAWN_GAP + Math.random() * (MAX_SPAWN_GAP - MIN_SPAWN_GAP);
+      this._nextSpawnX += gap;
+    }
   }
 
   // Returns array of { type, points } events for this frame
@@ -43,13 +58,22 @@ export class BoostManager {
     // Spawn ahead
     const spawnFrontier = scrollX + SPAWN_LOOKAHEAD;
     while (this._nextSpawnX < spawnFrontier) {
-      this._spawnTreat(this._nextSpawnX);
+      this._spawnItem(this._nextSpawnX);
       const gap = MIN_SPAWN_GAP + Math.random() * (MAX_SPAWN_GAP - MIN_SPAWN_GAP);
       this._nextSpawnX += gap;
     }
 
+    // Birds drift left slowly — creates a gentle chase
+    for (const item of this.items) {
+      if (item.type === 'bird' && !item.collected) {
+        item.worldX -= item.speed * dt;
+        // Bird bobs gently in the air around its spawn height
+        item.worldY = item.baseY + Math.sin(this._time * 3 + item.phase) * 8;
+      }
+    }
+
     // Cull off-screen
-    this.items = this.items.filter(item => item.worldX - scrollX > -60);
+    this.items = this.items.filter(item => item.worldX - scrollX > -80);
 
     // Collision + collection
     const hb = kafka.getHitbox();
@@ -112,6 +136,20 @@ export class BoostManager {
     ctx.restore();
   }
 
+  // Router — picks what to spawn based on weighted random + time of day
+  _spawnItem(worldX) {
+    const roll = Math.random();
+
+    if (roll < 0.10) {
+      this._spawnBox(worldX);       // 10% — boxes everywhere, any time
+    } else if (roll < 0.25) {
+      if (!this.isNight) this._spawnBird(worldX); // 15% chance, day only
+      else this._spawnTreat(worldX);
+    } else {
+      this._spawnTreat(worldX);     // default
+    }
+  }
+
   _spawnTreat(worldX) {
     // Day: common. Night: rare (70% skip chance)
     if (this.isNight && Math.random() < 0.70) return;
@@ -127,6 +165,42 @@ export class BoostManager {
       points:     TREAT_POINTS,
       flashColor: FLASH_TREAT,
       glowColor:  '#ff69b4',
+      phase:      Math.random() * Math.PI * 2,
+      collected:  false,
+    });
+  }
+
+  _spawnBird(worldX) {
+    // Birds appear ahead and drift left — Kafka has to move to catch them
+    const BIRD_EMOJIS = ['🐦', '🐦', '🐦', '🐤'];  // mostly blue, occasional chick
+    const emoji = BIRD_EMOJIS[Math.floor(Math.random() * BIRD_EMOJIS.length)];
+
+    this.items.push({
+      type:       'bird',
+      emoji,
+      worldX:     worldX + 200,   // spawn further ahead so chase has room
+      worldY:     this.groundY - 90,  // in the air — must jump to reach
+      baseY:      this.groundY - 130,  // bob anchor
+      energy:     BIRD_ENERGY,
+      points:     BIRD_POINTS,
+      flashColor: FLASH_TREAT,
+      glowColor:  '#a0d8ef',
+      phase:      Math.random() * Math.PI * 2,
+      speed:      60 + Math.random() * 40,  // px/s leftward drift
+      collected:  false,
+    });
+  }
+
+  _spawnBox(worldX) {
+    this.items.push({
+      type:       'box',
+      emoji:      '📦',
+      worldX,
+      worldY:     this.groundY - 2,
+      energy:     BOX_ENERGY,
+      points:     BOX_POINTS,
+      flashColor: FLASH_TREAT,
+      glowColor:  '#d4a96a',
       phase:      Math.random() * Math.PI * 2,
       collected:  false,
     });
