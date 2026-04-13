@@ -66,12 +66,19 @@ export default function Game() {
         kafka.update(dt, currentInput);
         // kafka.vx is only non-zero when Kafka is at the lock point scrolling the world
         world.update(dt, kafka.vx);
-        boosts.update(dt, world.scrollX, kafka);
+        const boostEvents = boosts.update(dt, world.scrollX, kafka);
 
         // Update score
         const s = scoreRef.current;
         s.distance += kafka.vx * dt;
+
+        // Distance score (continuous)
         s.score = Math.floor(s.distance) * s.multiplier;
+
+        // Boost collection points (additive on top of distance score)
+        for (const ev of boostEvents) {
+          s.score += ev.points * s.multiplier;
+        }
 
         useGameStore.getState().updateRun(
           kafka.energy,
