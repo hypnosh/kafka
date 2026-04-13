@@ -252,12 +252,8 @@ export class Kafka {
         this.facingRight = false;
         if (this.onGround) this.state = KAFKA_STATES.WALK;
       } else {
-        // No input: if already at lockX, world keeps scrolling at base speed (idle run)
-        if (this.x >= this.lockX - 1) {
-          this.vx = WALK_SPEED;
-        } else {
-          this.vx = 0;
-        }
+        // No input: full stop
+        this.vx = 0;
         this.screenVx = 0;
         if (this.onGround && this.scratchTimer <= 0 && this.hissTimer <= 0) {
           this.state = KAFKA_STATES.IDLE;
@@ -386,9 +382,24 @@ export class Kafka {
   }
 
   _updateEnergy(dt) {
-    // Passive drain
-    const drainRate = 0.008; // per second — gentle
-    this.energy = Math.max(0, this.energy - drainRate * dt);
+    const isIdle = this.state === KAFKA_STATES.IDLE
+      && this.vx === 0
+      && this.screenVx === 0
+      && this.onGround;
+
+    if (isIdle) {
+      // Relaxed restore — slightly faster the more depleted she is
+      const restoreRate = 0.008 + (1 - this.energy) * 0.004;
+      this.energy = Math.min(1, this.energy + restoreRate * dt);
+    } else {
+      // Passive drain — heavier during high-effort states
+      const drainRate = this.state === KAFKA_STATES.RUN    ? 0.014
+                      : this.state === KAFKA_STATES.POUNCE ? 0.022
+                      : this.state === KAFKA_STATES.HISS   ? 0.0   // hiss costs applied one-shot on trigger
+                      : 0.008;
+      this.energy = Math.max(0, this.energy - drainRate * dt);
+    }
+
     this.isLowEnergy = this.energy < 0.3;
 
     if (this.energy <= 0 && this.state !== KAFKA_STATES.SLINK) {

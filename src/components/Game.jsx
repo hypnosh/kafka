@@ -6,6 +6,7 @@ import { Kafka } from '../game/kafka';
 import { World } from '../game/world';
 import { InputManager } from '../game/input';
 import { DayNight } from '../game/daynight';
+import { BoostManager } from '../game/boosts';
 import { useGameStore } from '../game/store';
 
 // Fade-in overlay system (stepped, 8-bit style per PRD)
@@ -19,6 +20,7 @@ export default function Game() {
   const worldRef = useRef(null);
   const inputRef = useRef(null);
   const dayNightRef = useRef(null);
+  const boostsRef = useRef(null);
   const fadeRef = useRef({ step: 0, timer: 0, active: true });
   const scoreRef = useRef({ score: 0, distance: 0, miceCaught: 0, streak: 0, multiplier: 1 });
 
@@ -42,6 +44,9 @@ export default function Game() {
     const world = new World(w, h, dayNight.isNight);
     worldRef.current = world;
 
+    const boosts = new BoostManager(w, h, dayNight.isNight);
+    boostsRef.current = boosts;
+
     const input = new InputManager();
     inputRef.current = input;
 
@@ -61,6 +66,7 @@ export default function Game() {
         kafka.update(dt, currentInput);
         // kafka.vx is only non-zero when Kafka is at the lock point scrolling the world
         world.update(dt, kafka.vx);
+        boosts.update(dt, world.scrollX, kafka);
 
         // Update score
         const s = scoreRef.current;
@@ -87,6 +93,11 @@ export default function Game() {
 
         // Always render the world (alive on intro too, per PRD)
         world.render(ctx, dayNight.isNight, dayNight.twilightAlpha);
+
+        // Boosts — rendered above world, below Kafka
+        if (phase === 'running' || phase === 'paused') {
+          boosts.render(ctx, world.scrollX);
+        }
 
         // Kafka
         if (phase === 'running' || phase === 'paused' || phase === 'intro') {
