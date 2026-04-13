@@ -59,6 +59,7 @@ export default function Game() {
         }
 
         kafka.update(dt, currentInput);
+        // kafka.vx is only non-zero when Kafka is at the lock point scrolling the world
         world.update(dt, kafka.vx);
 
         // Update score
@@ -108,7 +109,6 @@ export default function Game() {
         // Stepped fade-in overlay
         const fade = fadeRef.current;
         if (fade.active) {
-          fade.timer += (alpha * 0); // alpha unused here, we use real time
           const opacity = FADE_STEPS[Math.min(fade.step, FADE_STEPS.length - 1)];
           if (opacity > 0) {
             ctx.fillStyle = dayNight.isNight
@@ -180,11 +180,12 @@ export default function Game() {
       const w = canvas.parentElement.clientWidth;
       const h = canvas.parentElement.clientHeight;
       engine.resize(w, h);
-      if (kafkaRef.current) {
-        kafkaRef.current.x = w * 0.30;
-        kafkaRef.current.groundY = h - 80;
-        kafkaRef.current.canvasWidth = w;
-        kafkaRef.current.canvasHeight = h;
+      // Use Kafka's resize() method so lock point recalculates correctly
+      kafkaRef.current?.resize(w, h);
+      if (worldRef.current) {
+        worldRef.current.canvasWidth = w;
+        worldRef.current.canvasHeight = h;
+        worldRef.current.groundY = h - 80;
       }
     };
     window.addEventListener('resize', onResize);
