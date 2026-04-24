@@ -54,7 +54,7 @@ const IDLE_ANIMATIONS = [
 
 // Physics constants
 const GRAVITY = 1800;         // px/s²
-const JUMP_VELOCITY = -620;   // px/s (negative = up)
+const JUMP_VELOCITY = -920;   // px/s (negative = up)
 const JUMP_HOLD_BONUS = -280; // extra velocity if hold sustained
 const WALK_SPEED = 180;       // px/s
 const RUN_SPEED = 320;        // px/s
@@ -100,6 +100,7 @@ export class Kafka {
     this.idleAnimTime = 0;
     this.landingTimer = 0;
     this.hitTimer = 0;
+    this.invincibleTimer = 0;   // seconds of post-hit invincibility
     this.scratchTimer = 0;
     this.hissTimer = 0;
     this.jumpChargeTime = 0;
@@ -149,6 +150,7 @@ export class Kafka {
   _updateTimers(dt) {
     if (this.landingTimer > 0) this.landingTimer -= dt;
     if (this.hitTimer > 0) this.hitTimer -= dt;
+    if (this.invincibleTimer > 0) this.invincibleTimer -= dt;
     if (this.scratchTimer > 0) this.scratchTimer -= dt;
     if (this.hissTimer > 0) this.hissTimer -= dt;
     if (this.flashTimer > 0) this.flashTimer -= dt;
@@ -206,35 +208,29 @@ export class Kafka {
       this.scratchTimer = 0.25;
     }
 
-    // Jump charge
-    if (jumpHeld && this.onGround && !this.isChargingJump) {
-      this.isChargingJump = true;
-      this.jumpChargeTime = 0;
-      this.state = KAFKA_STATES.JUMP_CHARGE;
-    }
-    if (this.isChargingJump) {
-      this.jumpChargeTime = Math.min(this.jumpChargeTime + dt, 0.5);
-      if (!jumpHeld) {
-        // Release — launch
-        const chargeRatio = this.jumpChargeTime / 0.5;
-        this.vy = JUMP_VELOCITY + JUMP_HOLD_BONUS * chargeRatio;
-        this.onGround = false;
-        this.isChargingJump = false;
-        this.state = KAFKA_STATES.AIRBORNE;
-        this.scaleX = 0.8;
-        this.scaleY = 1.3;
-      }
-      return;
-    }
-
-    // Quick tap jump (jumpPressed without hold)
+    // Jump: tap launches immediately. Charge only engages if key is still held next frame.
     if (jumpPressed && this.onGround && !this.isChargingJump) {
+      // Launch immediately on press — no waiting for release
       this.vy = JUMP_VELOCITY * 0.65;
       this.onGround = false;
       this.state = KAFKA_STATES.AIRBORNE;
       this.scaleX = 0.8;
       this.scaleY = 1.3;
+      // Mark that we can boost this jump if held continues
+      this.isChargingJump = true;
+      this.jumpChargeTime = 0;
+      this._jumpBoosted = false;
       return;
+    }
+
+    // Jump hold boost — add extra velocity while key held, up to 0.5s, once per jump
+    if (this.isChargingJump && jumpHeld && !this.onGround && !this._jumpBoosted) {
+      this.jumpChargeTime = Math.min(this.jumpChargeTime + dt, 0.5);
+      const boostForce = JUMP_HOLD_BONUS * dt / 0.5;
+      this.vy += boostForce;
+    }
+    if (this.isChargingJump && !jumpHeld) {
+      this._jumpBoosted = true; // key released — no more boost this jump
     }
 
     // Horizontal movement
@@ -296,10 +292,10 @@ export class Kafka {
         this.onGround = true;
         this.state = KAFKA_STATES.LANDING;
         this.landingTimer = 0.1;
-        // Squash on land
         this.scaleX = 1.3;
         this.scaleY = 0.7;
         this.isChargingJump = false;
+        this._jumpBoosted = false;
       }
     } else {
       this.y = this.groundY;
@@ -388,7 +384,7 @@ export class Kafka {
       && this.onGround;
 
     if (isIdle) {
-      // Relaxed restore — slightly faster the more depleted she is
+      // Relaxed restore — slow, barely perceptible
       const restoreRate = 0.008 + (1 - this.energy) * 0.004;
       this.energy = Math.min(1, this.energy + restoreRate * dt);
     } else {
@@ -407,12 +403,19 @@ export class Kafka {
     }
   }
 
-  takeHit(damage = 0.15) {
-    this.energy = Math.max(0, this.energy - damage);
+  // Returns true if the hit landed, false if absorbed by invincibility
+  takeHit() {
+    if (this.invincibleTimer > 0) return false;
     this.state = KAFKA_STATES.HIT;
-    this.hitTimer = 0.4;
+    this.hitTimer = 0.5;
+    this.invincibleTimer = 2.0;  // 2 seconds of flicker invincibility
     this.shakeTimer = 0.3;
-    this.vy = -200; // small knockback
+    this.vy = -200;
+    return true;
+  }
+
+  isInvincible() {
+    return this.invincibleTimer > 0;
   }
 
   collectBoost(amount, flashColor) {
@@ -468,8 +471,12 @@ export class Kafka {
     ctx.textBaseline = 'bottom';
 
     const emoji = this.getCurrentEmoji();
-    ctx.globalAlpha = 1;
+    // Flicker during invincibility — alternate opacity every 80ms using time
+    const flickering = this.invincibleTimer > 0;
+    const flickerOn = flickering ? (Math.floor(this.invincibleTimer * 12) % 2 === 0) : true;
+    ctx.globalAlpha = flickerOn ? 1 : 0.15;
     ctx.fillText(emoji, 0, 0);
+    ctx.globalAlpha = 1;
 
     // Flash ring
     if (this.flashTimer > 0 && this.flashColor) {

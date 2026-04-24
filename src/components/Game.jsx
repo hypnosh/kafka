@@ -89,7 +89,21 @@ export default function Game() {
           s.multiplier,
         );
 
-        // Run end
+        // Obstacle hit — deduct a life, end run only if out of lives
+        // (Enemies/obstacles call kafka.takeHit() externally; we check the result here)
+        if (kafka.hitTimer > 0 && kafka._lifeDeducted !== true) {
+          kafka._lifeDeducted = true;
+          const gameOver = useGameStore.getState().loseLife();
+          if (gameOver) {
+            useGameStore.getState().endRun('lives');
+          }
+        }
+        // Reset flag once hit window closes so next hit registers
+        if (kafka.hitTimer <= 0) {
+          kafka._lifeDeducted = false;
+        }
+
+        // Slink (energy zero) — also ends the run
         if (kafka.state === 'slink' && kafka.energy <= 0) {
           useGameStore.getState().endRun('energy');
         }

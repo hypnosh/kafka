@@ -38,6 +38,13 @@ export const useGameStore = create((set, get) => ({
 
   setNight: (isNight, isGoldenHour) => set({ isNight, isGoldenHour }),
 
+  // Deduct one life. Returns true if the run should end (no lives left).
+  loseLife: () => {
+    const lives = get().lives - 1;
+    set({ lives });
+    return lives <= 0;
+  },
+
   endRun: (cause) => {
     const s = get();
     const lifetime = s.lifetimeScore + s.score;
@@ -62,6 +69,7 @@ export const useGameStore = create((set, get) => ({
     phase: 'running',
     paused: false,
     energy: 1.0,
+    lives: 3,
     score: 0,
     distance: 0,
     miceCaught: 0,
