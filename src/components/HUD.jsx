@@ -3,13 +3,13 @@
 import { useGameStore } from '../game/store';
 
 export default function HUD() {
-  const { energy, lives, score, miceCaught, isNight, phase } = useGameStore();
+  const { energy, lives, score, miceCaught, isNight, phase, lastHitAt } = useGameStore();
 
   if (phase === 'summary' || phase === 'locked' || phase === 'intro') return null;
 
   const energyPct = Math.max(0, Math.min(1, energy)) * 100;
   const energyColor = energy < 0.15 ? '#ff3333' : energy < 0.30 ? '#ffaa00' : '#44cc66';
-  const pulse = energy < 0.15 ? 'pulse-red' : energy < 0.30 ? 'pulse-amber' : '';
+  const hitAge = Date.now() - (lastHitAt || 0);
 
   return (
     <div style={{
@@ -47,13 +47,19 @@ export default function HUD() {
 
         {/* Lives */}
         <div style={{ display: 'flex', gap: 3 }}>
-          {[0, 1, 2].map(i => (
-            <span key={i} style={{
-              fontSize: 14,
-              opacity: i < lives ? 1 : 0.25,
-              filter: i < lives ? 'none' : 'grayscale(1)',
-            }}>🐱</span>
-          ))}
+          {[0, 1, 2].map(i => {
+            const active = i < lives;
+            const justLost = i === lives && hitAge < 600;
+            return (
+              <span key={i} style={{
+                fontSize: 14,
+                opacity: active ? 1 : 0.25,
+                filter: active ? 'none' : 'grayscale(1)',
+                display: 'inline-block',
+                animation: justLost ? 'flash-lost 0.6s ease-out forwards' : 'none',
+              }}>🐱</span>
+            );
+          })}
         </div>
       </div>
 
@@ -76,7 +82,7 @@ export default function HUD() {
         )}
       </div>
 
-      {/* Night indicator dot (subtle, not announced) */}
+      {/* Night indicator */}
       {isNight && (
         <div style={{
           position: 'absolute',
@@ -96,6 +102,10 @@ export default function HUD() {
         @keyframes pulse-amber {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.75; }
+        }
+        @keyframes flash-lost {
+          0%   { opacity: 1; filter: none; transform: scale(1.5); }
+          100% { opacity: 0.25; filter: grayscale(1); transform: scale(1); }
         }
       `}</style>
     </div>

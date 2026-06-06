@@ -39,9 +39,11 @@ export const useGameStore = create((set, get) => ({
   setNight: (isNight, isGoldenHour) => set({ isNight, isGoldenHour }),
 
   // Deduct one life. Returns true if the run should end (no lives left).
+  lastHitAt: 0,   // timestamp for HUD flash
+
   loseLife: () => {
     const lives = get().lives - 1;
-    set({ lives });
+    set({ lives, lastHitAt: Date.now() });
     return lives <= 0;
   },
 

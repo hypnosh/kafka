@@ -403,16 +403,22 @@ export class Kafka {
     }
   }
 
-  // Returns true if the hit landed, false if absorbed by invincibility
-  takeHit() {
+  // Returns true if hit landed, false if invincible
+  takeDamage(sourceX) {
     if (this.invincibleTimer > 0) return false;
     this.state = KAFKA_STATES.HIT;
-    this.hitTimer = 0.5;
-    this.invincibleTimer = 2.0;  // 2 seconds of flicker invincibility
+    this.hitTimer = 0.25;
+    this.invincibleTimer = 3.0;
     this.shakeTimer = 0.3;
-    this.vy = -200;
+    // knockback away from source
+    const dir = (sourceX !== undefined && sourceX < this.x) ? 1 : -1;
+    this.vx = dir * 25;  // small horizontal push, cleared next frame
+    this.vy = -150;
     return true;
   }
+
+  // Legacy alias
+  takeHit() { return this.takeDamage(); }
 
   isInvincible() {
     return this.invincibleTimer > 0;
