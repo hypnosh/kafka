@@ -149,7 +149,12 @@ export class Kafka {
 
   _updateTimers(dt) {
     if (this.landingTimer > 0) this.landingTimer -= dt;
-    if (this.hitTimer > 0) this.hitTimer -= dt;
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0 && this.state === KAFKA_STATES.HIT) {
+        this.state = KAFKA_STATES.IDLE;
+      }
+    }
     if (this.invincibleTimer > 0) this.invincibleTimer -= dt;
     if (this.scratchTimer > 0) this.scratchTimer -= dt;
     if (this.hissTimer > 0) this.hissTimer -= dt;
