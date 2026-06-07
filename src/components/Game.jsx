@@ -8,6 +8,7 @@ import { InputManager } from '../game/input';
 import { DayNight } from '../game/daynight';
 import { BoostManager } from '../game/boosts';
 import { useGameStore } from '../game/store';
+import { EnemyManager } from '../game/enemies';
 
 // Fade-in overlay system (stepped, 8-bit style per PRD)
 const FADE_STEPS = [1, 0.87, 0.75, 0.62, 0.50, 0.37, 0.25, 0.12, 0];
@@ -46,6 +47,8 @@ export default function Game() {
 
     const boosts = new BoostManager(w, h, dayNight.isNight);
     boostsRef.current = boosts;
+    const enemies = new EnemyManager(w, h);
+    // enemiesRef.current = enemies;  // add ref at top if needed
 
     const input = new InputManager();
     inputRef.current = input;
@@ -67,6 +70,7 @@ export default function Game() {
         // kafka.vx is only non-zero when Kafka is at the lock point scrolling the world
         world.update(dt, kafka.vx);
         const boostEvents = boosts.update(dt, world.scrollX, kafka);
+        enemies.update(dt, world.scrollX, kafka);  // ← add this line
 
         // Update score
         const s = scoreRef.current;
@@ -118,6 +122,9 @@ export default function Game() {
         // Boosts — rendered above world, below Kafka
         if (phase === 'running' || phase === 'paused') {
           boosts.render(ctx, world.scrollX);
+          if (phase === 'running' || phase === 'paused') {
+            enemies.render(ctx);
+          }
         }
 
         // Kafka
@@ -212,6 +219,7 @@ export default function Game() {
       const w = canvas.parentElement.clientWidth;
       const h = canvas.parentElement.clientHeight;
       engine.resize(w, h);
+      enemies.resize(w, h);
       // Use Kafka's resize() method so lock point recalculates correctly
       kafkaRef.current?.resize(w, h);
       if (worldRef.current) {
