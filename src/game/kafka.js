@@ -412,8 +412,8 @@ export class Kafka {
     this.shakeTimer = 0.3;
     // knockback away from source
     const dir = (sourceX !== undefined && sourceX < this.x) ? 1 : -1;
-    this.vx = dir * 25;  // small horizontal push, cleared next frame
-    this.vy = -150;
+    // this.vx = dir * 25;  // small horizontal push, cleared next frame
+    this.vy = -150; // only vy, no vx
     return true;
   }
 

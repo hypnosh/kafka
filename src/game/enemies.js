@@ -3,7 +3,8 @@
 const DOG_SPEED = 140;
 const DOG_SPAWN_INTERVAL = 8;
 const DOG_SPAWN_X_AHEAD = 900;
-const STOMP_BOUNCE = -400; // px/s upward on stomp
+const STOMP_BOUNCE = -400;
+const HIT_WALK_AWAY_DURATION = 2.0; // seconds dog walks away after hitting Kafka
 
 export class EnemyManager {
   constructor(canvasWidth, canvasHeight) {
@@ -23,20 +24,31 @@ export class EnemyManager {
 
     for (const e of this.enemies) {
       if (e.dead) {
-        // Death pop animation — float up and fade
         e.deadTimer -= dt;
-        e.screenX += e.facingRight ? -20 * dt : 20 * dt;
         continue;
       }
-      const dx = kafka.x - e.screenX;
-      e.screenX += (dx > 0 ? 1 : -1) * DOG_SPEED * dt;
-      e.facingRight = dx > 0;
-      e.worldX -= kafka.vx * dt;
+
+      if (e.hitCooldown > 0) {
+        // Walk away from Kafka after hit
+        e.hitCooldown -= dt;
+        const awayDir = e.screenX < kafka.x ? -1 : 1;
+        e.screenX += awayDir * DOG_SPEED * dt;
+        e.facingRight = awayDir > 0;
+      } else {
+        // Chase Kafka
+        const dx = kafka.x - e.screenX;
+        e.screenX += (dx > 0 ? 1 : -1) * DOG_SPEED * dt;
+        e.facingRight = dx > 0;
+      }
+
+      // Scroll with world
+      e.screenX -= kafka.vx * dt;
     }
 
+    // Collision
     const kb = kafka.getHitbox();
     for (const e of this.enemies) {
-      if (e.dead) continue;
+      if (e.dead || e.hitCooldown > 0) continue;
 
       const ew = 32, eh = 32;
       const horizOverlap = (
@@ -45,10 +57,7 @@ export class EnemyManager {
       );
       if (!horizOverlap) continue;
 
-      // Top of dog in screen space
       const dogTop = this.groundY - eh;
-
-      // Stomp: Kafka falling, feet above dog top last frame, now at/below dog top
       const kafkaFeet = kb.y + kb.h;
       const stomping = !kafka.onGround && kafka.vy > 0 && kafkaFeet >= dogTop && kafkaFeet <= this.groundY;
 
@@ -62,15 +71,12 @@ export class EnemyManager {
         if (bodyHit) {
           const hit = kafka.takeDamage(e.screenX);
           if (hit) {
-            // Shove dog past Kafka so it can't re-hit during invincibility
-            const pushDir = e.screenX < kafka.x ? -1 : 1;
-            e.screenX = kafka.x + pushDir * 80;
+            e.hitCooldown = HIT_WALK_AWAY_DURATION;
           }
         }
       }
     }
 
-    // Cull dead (after animation) and off-screen
     this.enemies = this.enemies.filter(e =>
       !(e.dead && e.deadTimer <= 0) &&
       e.screenX > -100 &&
@@ -84,9 +90,9 @@ export class EnemyManager {
       screenX: this.canvasWidth + 60,
       worldX: scrollX + DOG_SPAWN_X_AHEAD,
       facingRight: false,
-      animTime: 0,
       dead: false,
       deadTimer: 0,
+      hitCooldown: 0,
     });
   }
 
@@ -97,10 +103,9 @@ export class EnemyManager {
       ctx.translate(e.screenX, this.groundY);
 
       if (e.dead) {
-        // Float up + fade out
         const progress = 1 - (e.deadTimer / 0.4);
         ctx.translate(0, -progress * 30);
-        ctx.globalAlpha = e.deadTimer / 0.4;
+        ctx.globalAlpha = Math.max(0, e.deadTimer / 0.4);
         ctx.font = '22px serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
