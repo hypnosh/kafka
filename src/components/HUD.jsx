@@ -1,15 +1,23 @@
 // HUD.jsx — energy bar, score, life icons, mute toggle
 
+import { useState } from 'react';
 import { useGameStore } from '../game/store';
+import { sound } from '../game/sound';
 
 export default function HUD() {
   const { energy, lives, score, miceCaught, isNight, phase, lastHitAt } = useGameStore();
+  const [muted, setMuted] = useState(sound.isMuted());
 
   if (phase === 'summary' || phase === 'locked' || phase === 'intro') return null;
 
   const energyPct = Math.max(0, Math.min(1, energy)) * 100;
   const energyColor = energy < 0.15 ? '#ff3333' : energy < 0.30 ? '#ffaa00' : '#44cc66';
   const hitAge = Date.now() - (lastHitAt || 0);
+
+  const toggleMute = () => {
+    sound.setMuted(!muted);
+    setMuted(!muted);
+  };
 
   return (
     <div style={{
@@ -63,7 +71,7 @@ export default function HUD() {
         </div>
       </div>
 
-      {/* Top-right: score + mice */}
+      {/* Top-right: score + mice + mute */}
       <div style={{
         position: 'absolute',
         top: 12,
@@ -71,9 +79,18 @@ export default function HUD() {
         textAlign: 'right',
         color: 'rgba(255,255,255,0.9)',
         textShadow: '0 1px 3px rgba(0,0,0,0.7)',
+        pointerEvents: 'auto',
       }}>
-        <div style={{ fontSize: 16, fontWeight: 'bold', letterSpacing: 1 }}>
-          {score.toLocaleString()}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+          <span
+            onClick={toggleMute}
+            style={{ cursor: 'pointer', fontSize: 14, opacity: 0.6 }}
+          >
+            {muted ? '🔇' : '🔊'}
+          </span>
+          <span style={{ fontSize: 16, fontWeight: 'bold', letterSpacing: 1 }}>
+            {score.toLocaleString()}
+          </span>
         </div>
         {miceCaught > 0 && (
           <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>
@@ -95,14 +112,6 @@ export default function HUD() {
       )}
 
       <style>{`
-        @keyframes pulse-red {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-        @keyframes pulse-amber {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.75; }
-        }
         @keyframes flash-lost {
           0%   { opacity: 1; filter: none; transform: scale(1.5); }
           100% { opacity: 0.25; filter: grayscale(1); transform: scale(1); }

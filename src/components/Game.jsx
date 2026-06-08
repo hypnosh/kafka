@@ -7,10 +7,10 @@ import { World } from '../game/world';
 import { InputManager } from '../game/input';
 import { DayNight } from '../game/daynight';
 import { BoostManager } from '../game/boosts';
-import { useGameStore } from '../game/store';
 import { EnemyManager } from '../game/enemies';
+import { sound } from '../game/sound';
+import { useGameStore } from '../game/store';
 
-// Fade-in overlay system (stepped, 8-bit style per PRD)
 const FADE_STEPS = [1, 0.87, 0.75, 0.62, 0.50, 0.37, 0.25, 0.12, 0];
 const FADE_STEP_MS = 100;
 
@@ -22,6 +22,7 @@ export default function Game() {
   const inputRef = useRef(null);
   const dayNightRef = useRef(null);
   const boostsRef = useRef(null);
+  const enemiesRef = useRef(null);
   const fadeRef = useRef({ step: 0, timer: 0, active: true });
   const scoreRef = useRef({ score: 0, distance: 0, miceCaught: 0, streak: 0, multiplier: 1 });
 
@@ -47,39 +48,58 @@ export default function Game() {
 
     const boosts = new BoostManager(w, h, dayNight.isNight);
     boostsRef.current = boosts;
+
     const enemies = new EnemyManager(w, h);
-    // enemiesRef.current = enemies;  // add ref at top if needed
+    enemiesRef.current = enemies;
 
     const input = new InputManager();
     inputRef.current = input;
 
-    // Register world system
+    // Track previous kafka state for sound triggers
+    let prevKafkaState = kafka.state;
+    let wasOnGround = kafka.onGround;
+
     engine.register({
       update(dt, state) {
         if (state.phase !== 'running') return;
         input.update();
         const currentInput = input.state;
 
-        // Handle pause
         if (currentInput.pause) {
           useGameStore.getState().setPhase('paused');
           return;
         }
 
+        const prevState = kafka.state;
+        const wasGrounded = kafka.onGround;
+
         kafka.update(dt, currentInput);
-        // kafka.vx is only non-zero when Kafka is at the lock point scrolling the world
         world.update(dt, kafka.vx);
         const boostEvents = boosts.update(dt, world.scrollX, kafka);
-        enemies.update(dt, world.scrollX, kafka);  // ← add this line
+        enemies.update(dt, world.scrollX, kafka);
 
-        // Update score
+        // ── Sound triggers ──
+        if (kafka.state === 'run') sound.run(dt);
+        else if (kafka.state === 'walk') sound.walk(dt);
+
+        // Jump — fired on transition to airborne
+        if (prevState !== 'airborne' && kafka.state === 'airborne') sound.jump();
+
+        // Land — fired on transition from airborne to ground
+        if (!wasGrounded && kafka.onGround) sound.land();
+
+        // Hit — fired when takeDamage lands (invincibleTimer just set to 3.0)
+        if (prevState !== 'hit' && kafka.state === 'hit') sound.hit();
+
+        // Boost collect
+        for (const ev of boostEvents) {
+          sound.boost();
+        }
+
+        // ── Score ──
         const s = scoreRef.current;
         s.distance += kafka.vx * dt;
-
-        // Distance score (continuous)
         s.score = Math.floor(s.distance) * s.multiplier;
-
-        // Boost collection points (additive on top of distance score)
         for (const ev of boostEvents) {
           s.score += ev.points * s.multiplier;
         }
@@ -93,8 +113,7 @@ export default function Game() {
           s.multiplier,
         );
 
-        // Obstacle hit — deduct a life, end run only if out of lives
-        // (Enemies/obstacles call kafka.takeHit() externally; we check the result here)
+        // ── Life deduction ──
         if (kafka.hitTimer > 0 && kafka._lifeDeducted !== true) {
           kafka._lifeDeducted = true;
           const gameOver = useGameStore.getState().loseLife();
@@ -102,12 +121,11 @@ export default function Game() {
             useGameStore.getState().endRun('lives');
           }
         }
-        // Reset flag once hit window closes so next hit registers
         if (kafka.hitTimer <= 0) {
           kafka._lifeDeducted = false;
         }
 
-        // Slink (energy zero) — also ends the run
+        // ── Run end: energy zero ──
         if (kafka.state === 'slink' && kafka.energy <= 0) {
           useGameStore.getState().endRun('energy');
         }
@@ -116,23 +134,17 @@ export default function Game() {
       render(ctx, alpha, state) {
         const { phase } = state;
 
-        // Always render the world (alive on intro too, per PRD)
         world.render(ctx, dayNight.isNight, dayNight.twilightAlpha);
 
-        // Boosts — rendered above world, below Kafka
         if (phase === 'running' || phase === 'paused') {
           boosts.render(ctx, world.scrollX);
-          if (phase === 'running' || phase === 'paused') {
-            enemies.render(ctx);
-          }
+          enemies.render(ctx);
         }
 
-        // Kafka
         if (phase === 'running' || phase === 'paused' || phase === 'intro') {
           kafka.render(ctx);
         }
 
-        // Pause dim
         if (phase === 'paused') {
           ctx.fillStyle = 'rgba(0,0,0,0.5)';
           ctx.fillRect(0, 0, engine.logicalWidth, engine.logicalHeight);
@@ -145,7 +157,6 @@ export default function Game() {
           ctx.fillText('paused', engine.logicalWidth / 2, engine.logicalHeight / 2 + 16);
         }
 
-        // Stepped fade-in overlay
         const fade = fadeRef.current;
         if (fade.active) {
           const opacity = FADE_STEPS[Math.min(fade.step, FADE_STEPS.length - 1)];
@@ -155,9 +166,7 @@ export default function Game() {
               : `rgba(0,0,0,${opacity})`;
             ctx.fillRect(0, 0, engine.logicalWidth, engine.logicalHeight);
           }
-          if (fade.step >= FADE_STEPS.length - 1) {
-            fade.active = false;
-          }
+          if (fade.step >= FADE_STEPS.length - 1) fade.active = false;
         }
       },
     });
@@ -165,7 +174,6 @@ export default function Game() {
     engineRef.current = engine;
     engine.start();
 
-    // Drive the stepped fade independently of game loop
     let fadeInterval = setInterval(() => {
       const fade = fadeRef.current;
       if (fade.step < FADE_STEPS.length - 1) {
@@ -173,14 +181,12 @@ export default function Game() {
       } else {
         clearInterval(fadeInterval);
         fade.active = false;
-        // Transition from intro to running after fade
         if (useGameStore.getState().phase === 'intro') {
           useGameStore.getState().startRun();
         }
       }
     }, FADE_STEP_MS);
 
-    // Handle any-key to start on desktop
     const handleAnyKey = () => {
       if (useGameStore.getState().phase === 'intro') {
         useGameStore.getState().startRun();
@@ -188,8 +194,7 @@ export default function Game() {
     };
     window.addEventListener('keydown', handleAnyKey, { once: true });
 
-    // Resume from pause
-    const handleResume = (e) => {
+    const handleResume = () => {
       if (useGameStore.getState().phase === 'paused') {
         useGameStore.getState().setPhase('running');
       }
@@ -212,15 +217,13 @@ export default function Game() {
 
     const cleanup = initGame(canvas);
 
-    // Handle resize
     const onResize = () => {
       const engine = engineRef.current;
       if (!engine) return;
       const w = canvas.parentElement.clientWidth;
       const h = canvas.parentElement.clientHeight;
       engine.resize(w, h);
-      enemies.resize(w, h);
-      // Use Kafka's resize() method so lock point recalculates correctly
+      enemiesRef.current?.resize(w, h);
       kafkaRef.current?.resize(w, h);
       if (worldRef.current) {
         worldRef.current.canvasWidth = w;

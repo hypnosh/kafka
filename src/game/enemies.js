@@ -1,10 +1,12 @@
 // enemies.js — enemy system, Dog first
 
+import { sound } from './sound';
+
 const DOG_SPEED = 140;
 const DOG_SPAWN_INTERVAL = 8;
 const DOG_SPAWN_X_AHEAD = 900;
 const STOMP_BOUNCE = -400;
-const HIT_WALK_AWAY_DURATION = 2.0; // seconds dog walks away after hitting Kafka
+const HIT_WALK_AWAY_DURATION = 2.0;
 
 export class EnemyManager {
   constructor(canvasWidth, canvasHeight) {
@@ -29,23 +31,19 @@ export class EnemyManager {
       }
 
       if (e.hitCooldown > 0) {
-        // Walk away from Kafka after hit
         e.hitCooldown -= dt;
         const awayDir = e.screenX < kafka.x ? -1 : 1;
         e.screenX += awayDir * DOG_SPEED * dt;
         e.facingRight = awayDir > 0;
       } else {
-        // Chase Kafka
         const dx = kafka.x - e.screenX;
         e.screenX += (dx > 0 ? 1 : -1) * DOG_SPEED * dt;
         e.facingRight = dx > 0;
       }
 
-      // Scroll with world
       e.screenX -= kafka.vx * dt;
     }
 
-    // Collision
     const kb = kafka.getHitbox();
     for (const e of this.enemies) {
       if (e.dead || e.hitCooldown > 0) continue;
@@ -66,6 +64,7 @@ export class EnemyManager {
         kafka.onGround = false;
         e.dead = true;
         e.deadTimer = 0.4;
+        sound.stomp();
       } else {
         const bodyHit = kafkaFeet > dogTop + 8;
         if (bodyHit) {
